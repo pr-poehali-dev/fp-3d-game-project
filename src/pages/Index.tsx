@@ -1203,7 +1203,13 @@ export default function Index() {
         else setScreen(s);
       }} />}
       {screen === "agent-select" && <AgentSelectWithStore onNavigate={setScreen} />}
-      {screen === "shop" && <ShopScreen onNavigate={setScreen} />}
+      {screen === "shop" && (
+        <ShopScreen onNavigate={(s) => {
+          // "В бой" из магазина → всегда 3D
+          if (s === "game") setScreen("game3d");
+          else setScreen(s);
+        }} />
+      )}
       {screen === "game" && <GameScreen onNavigate={setScreen} />}
       {screen === "game3d" && (
         <Game3D
