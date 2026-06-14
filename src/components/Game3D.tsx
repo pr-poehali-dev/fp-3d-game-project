@@ -1,338 +1,12 @@
  
 import { useEffect, useRef, useState, useCallback } from "react";
 import * as THREE from "three";
-import Icon from "@/components/ui/icon";
 
-// ─── TYPES ───────────────────────────────────────────────────────────────────
-interface Enemy {
-  id: number;
-  mesh: THREE.Group;
-  hp: number;
-  maxHp: number;
-  alive: boolean;
-  name: string;
-  team: "T";
-  patrolPath: THREE.Vector3[];
-  patrolIdx: number;
-  speed: number;
-  lastShot: number;
-}
+import { AGENTS, Enemy, BombSite, GamePhase, checkCollision } from "./game3d/types";
+import { buildMap, createEnemyMesh } from "./game3d/mapBuilder";
+import GameHUD from "./game3d/GameHUD";
 
-interface BombSite {
-  id: "A" | "B";
-  position: THREE.Vector3;
-  mesh: THREE.Mesh;
-}
-
-type GamePhase = "playing" | "planting" | "planted" | "defusing" | "round_won" | "round_lost";
-
-// ─── AGENTS ──────────────────────────────────────────────────────────────────
-export const AGENTS = [
-  {
-    id: "phoenix", name: "Феникс", role: "Дуэлист",
-    ability: "Огненная стена", ult: "Возрождение",
-    color: "#e05020", skin: 0xe05020,
-    desc: "Агрессивный агент с огненными способностями. Может возродиться после смерти.",
-    hp: 100, speed: 1.0,
-  },
-  {
-    id: "ghost", name: "Призрак", role: "Инициатор",
-    ability: "Флэш-граната", ult: "Разведка",
-    color: "#4a9eff", skin: 0x4a9eff,
-    desc: "Тактический агент, вскрывающий позиции врагов и создающий преимущество.",
-    hp: 100, speed: 0.95,
-  },
-  {
-    id: "shadow", name: "Тень", role: "Контроллер",
-    ability: "Дымовая завеса", ult: "Ядерный дым",
-    color: "#9b59b6", skin: 0x9b59b6,
-    desc: "Мастер контроля пространства. Перекрывает видимость и берёт контроль.",
-    hp: 100, speed: 0.90,
-  },
-  {
-    id: "ironwall", name: "Железная стена", role: "Страж",
-    ability: "Барьер", ult: "Крепость",
-    color: "#27ae60", skin: 0x27ae60,
-    desc: "Защитник команды. Возводит барьеры и удерживает позиции.",
-    hp: 125, speed: 0.85,
-  },
-  {
-    id: "viper", name: "Гадюка", role: "Снайпер",
-    ability: "Ядовитый туман", ult: "Клетка",
-    color: "#f5a623", skin: 0xf5a623,
-    desc: "Дальний боец с отравляющими способностями. Контролирует зоны.",
-    hp: 100, speed: 0.95,
-  },
-];
-
-// ─── MAP BUILDER ─────────────────────────────────────────────────────────────
-function buildMap(scene: THREE.Scene): BombSite[] {
-  // Textures
-  const loader = new THREE.TextureLoader();
-
-  // Ground
-  const groundGeo = new THREE.PlaneGeometry(120, 120, 20, 20);
-  const groundMat = new THREE.MeshLambertMaterial({ color: 0x8a7050 });
-  const ground = new THREE.Mesh(groundGeo, groundMat);
-  ground.rotation.x = -Math.PI / 2;
-  ground.receiveShadow = true;
-  scene.add(ground);
-
-  // Ground detail tiles
-  for (let i = 0; i < 40; i++) {
-    const tileGeo = new THREE.PlaneGeometry(3 + Math.random() * 4, 3 + Math.random() * 4);
-    const tileMat = new THREE.MeshLambertMaterial({ color: 0x7a6040 + Math.floor(Math.random() * 0x101010) });
-    const tile = new THREE.Mesh(tileGeo, tileMat);
-    tile.rotation.x = -Math.PI / 2;
-    tile.position.set((Math.random() - 0.5) * 100, 0.01, (Math.random() - 0.5) * 100);
-    tile.receiveShadow = true;
-    scene.add(tile);
-  }
-
-  // Helper to add a box
-  const addBox = (
-    w: number, h: number, d: number,
-    x: number, y: number, z: number,
-    color: number,
-    castShadow = true
-  ) => {
-    const geo = new THREE.BoxGeometry(w, h, d);
-    const mat = new THREE.MeshLambertMaterial({ color });
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.set(x, y + h / 2, z);
-    if (castShadow) { mesh.castShadow = true; mesh.receiveShadow = true; }
-    scene.add(mesh);
-    return mesh;
-  };
-
-  // ── OUTER WALLS ──
-  // North wall
-  addBox(120, 8, 2, 0, 0, -60, 0x4a3820);
-  // South wall
-  addBox(120, 8, 2, 0, 0, 60, 0x4a3820);
-  // West wall
-  addBox(2, 8, 120, -60, 0, 0, 0x4a3820);
-  // East wall
-  addBox(2, 8, 120, 60, 0, 0, 0x4a3820);
-
-  // ── MAIN BUILDINGS ──
-  // CT Base (south area)
-  addBox(24, 6, 16, -30, 0, 48, 0x5a4830);
-  addBox(24, 6, 16, 20, 0, 48, 0x5a4830);
-  // CT Base roof accent
-  addBox(26, 1, 18, -30, 6, 48, 0x3a2810);
-  addBox(26, 1, 18, 20, 6, 48, 0x3a2810);
-
-  // T Base (north area)
-  addBox(24, 6, 16, -28, 0, -48, 0x4a3020);
-  addBox(24, 6, 16, 22, 0, -48, 0x4a3020);
-
-  // ── MID AREA BUILDINGS ──
-  // Left corridor buildings
-  addBox(14, 5, 8, -40, 0, -10, 0x5a4028);
-  addBox(14, 5, 8, -40, 0, 10, 0x5a4028);
-
-  // Right corridor buildings
-  addBox(14, 5, 8, 38, 0, -8, 0x4a3828);
-  addBox(14, 5, 8, 38, 0, 12, 0x4a3828);
-
-  // Mid platform / tower
-  addBox(10, 4, 10, 0, 0, 5, 0x6a5030);
-  addBox(8, 0.5, 8, 0, 4, 5, 0x3a2010);  // roof
-
-  // ── SITE A (northwest) ──
-  // A site walls
-  addBox(18, 5, 2, -38, 0, -28, 0x5a4830);
-  addBox(2, 5, 14, -47, 0, -22, 0x5a4830);
-  // A boxes / cover
-  addBox(4, 3, 4, -38, 0, -20, 0x8a6040);
-  addBox(4, 2, 4, -34, 0, -24, 0x8a6040);
-  addBox(4, 3, 8, -42, 0, -18, 0x7a5030);
-
-  // ── SITE B (east area) ──
-  // B site walls
-  addBox(18, 5, 2, 38, 0, 20, 0x5a4830);
-  addBox(2, 5, 14, 47, 0, 14, 0x5a4830);
-  // B boxes / cover
-  addBox(4, 3, 4, 36, 0, 22, 0x8a6040);
-  addBox(4, 2, 4, 42, 0, 26, 0x8a6040);
-  addBox(8, 3, 4, 38, 0, 14, 0x7a5030);
-
-  // ── COVER OBJECTS (crates, barrels, sandbags) ──
-  const crateColor = 0x8a6030;
-  // Scattered crates
-  const cratePositions = [
-    [-15, 0, -15], [15, 0, -15], [-15, 0, 15], [18, 0, 18],
-    [5, 0, -20], [-5, 0, 20], [25, 0, 0], [-25, 0, 5],
-    [10, 0, 30], [-10, 0, -30], [30, 0, -20], [-30, 0, 20],
-  ];
-  cratePositions.forEach(([x, y, z]) => {
-    const size = 2 + Math.random() * 1.5;
-    addBox(size, size, size, x, 0, z, crateColor + Math.floor(Math.random() * 0x101010));
-  });
-
-  // Concrete barriers (long thin)
-  addBox(8, 1.5, 1.5, -5, 0, -5, 0x706050);
-  addBox(8, 1.5, 1.5, 5, 0, 5, 0x706050);
-  addBox(1.5, 1.5, 8, -10, 0, 8, 0x706050);
-  addBox(1.5, 1.5, 8, 12, 0, -8, 0x706050);
-
-  // ── PILLARS ──
-  const pillarPositions = [
-    [-20, 0, -20], [20, 0, -20], [-20, 0, 20], [20, 0, 20],
-    [0, 0, -30], [0, 0, 30],
-  ];
-  pillarPositions.forEach(([x, y, z]) => {
-    addBox(2, 5, 2, x, 0, z, 0x5a4030);
-  });
-
-  // ── DEBRIS / DETAIL ──
-  for (let i = 0; i < 15; i++) {
-    const x = (Math.random() - 0.5) * 90;
-    const z = (Math.random() - 0.5) * 90;
-    addBox(
-      0.5 + Math.random(), 0.3 + Math.random() * 0.5, 0.5 + Math.random(),
-      x, 0, z, 0x6a5030 + Math.floor(Math.random() * 0x202020)
-    );
-  }
-
-  // ── BOMB SITES ──
-  // Site A marker
-  const siteAGeo = new THREE.PlaneGeometry(8, 8);
-  const siteAMat = new THREE.MeshLambertMaterial({ color: 0xf5a623, transparent: true, opacity: 0.35 });
-  const siteA = new THREE.Mesh(siteAGeo, siteAMat);
-  siteA.rotation.x = -Math.PI / 2;
-  siteA.position.set(-38, 0.05, -20);
-  scene.add(siteA);
-
-  // A label pillar
-  addBox(0.5, 3, 0.5, -38, 0, -20, 0xf5a623);
-
-  // Site B marker
-  const siteBGeo = new THREE.PlaneGeometry(8, 8);
-  const siteBMat = new THREE.MeshLambertMaterial({ color: 0xf5a623, transparent: true, opacity: 0.35 });
-  const siteB = new THREE.Mesh(siteBGeo, siteBMat);
-  siteB.rotation.x = -Math.PI / 2;
-  siteB.position.set(38, 0.05, 20);
-  scene.add(siteB);
-
-  // B label pillar
-  addBox(0.5, 3, 0.5, 38, 0, 20, 0xf5a623);
-
-  return [
-    { id: "A", position: new THREE.Vector3(-38, 0, -20), mesh: siteA },
-    { id: "B", position: new THREE.Vector3(38, 0, 20), mesh: siteB },
-  ];
-}
-
-// ─── ENEMY BUILDER ───────────────────────────────────────────────────────────
-function createEnemyMesh(color: number): THREE.Group {
-  const group = new THREE.Group();
-
-  // Body
-  const bodyGeo = new THREE.BoxGeometry(0.8, 1.2, 0.5);
-  const bodyMat = new THREE.MeshLambertMaterial({ color });
-  const body = new THREE.Mesh(bodyGeo, bodyMat);
-  body.position.y = 1.0;
-  body.castShadow = true;
-  group.add(body);
-
-  // Head
-  const headGeo = new THREE.BoxGeometry(0.55, 0.55, 0.55);
-  const headMat = new THREE.MeshLambertMaterial({ color: 0xc8a080 });
-  const head = new THREE.Mesh(headGeo, headMat);
-  head.position.y = 1.85;
-  head.castShadow = true;
-  group.add(head);
-
-  // Helmet
-  const helmGeo = new THREE.BoxGeometry(0.62, 0.3, 0.62);
-  const helmMat = new THREE.MeshLambertMaterial({ color: color - 0x202020 });
-  const helm = new THREE.Mesh(helmGeo, helmMat);
-  helm.position.y = 2.05;
-  helm.castShadow = true;
-  group.add(helm);
-
-  // Left arm
-  const armGeo = new THREE.BoxGeometry(0.25, 0.9, 0.25);
-  const armMat = new THREE.MeshLambertMaterial({ color });
-  const leftArm = new THREE.Mesh(armGeo, armMat);
-  leftArm.position.set(-0.55, 0.95, 0);
-  group.add(leftArm);
-
-  // Right arm
-  const rightArm = new THREE.Mesh(armGeo, armMat);
-  rightArm.position.set(0.55, 0.95, 0);
-  group.add(rightArm);
-
-  // Legs
-  const legGeo = new THREE.BoxGeometry(0.32, 0.8, 0.32);
-  const legMat = new THREE.MeshLambertMaterial({ color: color - 0x101010 });
-  const leftLeg = new THREE.Mesh(legGeo, legMat);
-  leftLeg.position.set(-0.22, 0.4, 0);
-  group.add(leftLeg);
-  const rightLeg = new THREE.Mesh(legGeo, legMat);
-  rightLeg.position.set(0.22, 0.4, 0);
-  group.add(rightLeg);
-
-  // Weapon
-  const gunGeo = new THREE.BoxGeometry(0.15, 0.15, 0.8);
-  const gunMat = new THREE.MeshLambertMaterial({ color: 0x222222 });
-  const gun = new THREE.Mesh(gunGeo, gunMat);
-  gun.position.set(0.5, 1.1, 0.4);
-  group.add(gun);
-
-  // HP bar background
-  const hpBgGeo = new THREE.PlaneGeometry(1.2, 0.15);
-  const hpBgMat = new THREE.MeshBasicMaterial({ color: 0x333333 });
-  const hpBg = new THREE.Mesh(hpBgGeo, hpBgMat);
-  hpBg.position.y = 2.6;
-  hpBg.name = "hpbg";
-  group.add(hpBg);
-
-  const hpBarGeo = new THREE.PlaneGeometry(1.2, 0.12);
-  const hpBarMat = new THREE.MeshBasicMaterial({ color: 0x00ff44 });
-  const hpBar = new THREE.Mesh(hpBarGeo, hpBarMat);
-  hpBar.position.y = 2.6;
-  hpBar.position.z = 0.001;
-  hpBar.name = "hpbar";
-  group.add(hpBar);
-
-  return group;
-}
-
-// ─── COLLISION ───────────────────────────────────────────────────────────────
-const WALL_BOXES = [
-  // outer walls
-  { xMin: -61, xMax: 61, zMin: -61, zMax: -59 },
-  { xMin: -61, xMax: 61, zMin: 59, zMax: 61 },
-  { xMin: -61, xMax: -59, zMin: -61, zMax: 61 },
-  { xMin: 59, xMax: 61, zMin: -61, zMax: 61 },
-  // buildings
-  { xMin: -43, xMax: -17, zMin: 40, zMax: 57 },
-  { xMin: 8, xMax: 33, zMin: 40, zMax: 57 },
-  { xMin: -41, xMax: -16, zMin: -57, zMax: -40 },
-  { xMin: 9, xMax: 35, zMin: -57, zMax: -40 },
-  { xMin: -48, xMax: -33, zMin: -15, zMax: -5 },
-  { xMin: -48, xMax: -33, zMin: 5, zMax: 15 },
-  { xMin: 30, xMax: 46, zMin: -13, zMax: -3 },
-  { xMin: 30, xMax: 46, zMin: 7, zMax: 18 },
-  { xMin: -5, xMax: 5, zMin: 0, zMax: 10 },
-  // site walls
-  { xMin: -48, xMax: -30, zMin: -30, zMax: -27 },
-  { xMin: -49, xMax: -46, zMin: -30, zMax: -15 },
-  { xMin: 29, xMax: 48, zMin: 18, zMax: 22 },
-  { xMin: 45, xMax: 49, zMin: 8, zMax: 22 },
-];
-
-function checkCollision(x: number, z: number, radius = 0.5): boolean {
-  for (const b of WALL_BOXES) {
-    if (x + radius > b.xMin && x - radius < b.xMax && z + radius > b.zMin && z - radius < b.zMax) {
-      return true;
-    }
-  }
-  return false;
-}
+export { AGENTS };
 
 // ─── MAIN COMPONENT ──────────────────────────────────────────────────────────
 interface Game3DProps {
@@ -376,10 +50,10 @@ export default function Game3D({ agentId, onBack, onOpenShop }: Game3DProps) {
   const [score, setScore] = useState({ ct: 5, t: 4 });
   const [killfeed, setKillfeed] = useState<{ text: string; color: string }[]>([]);
   const [crosshairHit, setCrosshairHit] = useState(false);
-  const [abilityReady, setAbilityReady] = useState(true);
-  const [ultReady, setUltReady] = useState(false);
+  const [abilityReady] = useState(true);
+  const [ultReady] = useState(false);
   const [fps, setFps] = useState(60);
-  const [hint, setHint] = useState("WASD — движение  |  Мышь — прицел  |  ЛКМ — выстрел  |  F — действие  |  B — магазин");
+  const [mountLocked, setMountLocked] = useState(false);
 
   const phaseRef = useRef<GamePhase>("playing");
   const plantProgressRef = useRef(0);
@@ -677,13 +351,11 @@ export default function Game3D({ agentId, onBack, onOpenShop }: Game3DProps) {
     // ── KEYBOARD ──
     const onKeyDown = (e: KeyboardEvent) => {
       keysRef.current[e.key.toLowerCase()] = true;
-
       if (e.key.toLowerCase() === "b") onOpenShop();
       if (e.key.toLowerCase() === "f") handleAction();
     };
     const onKeyUp = (e: KeyboardEvent) => {
       keysRef.current[e.key.toLowerCase()] = false;
-      // Stop plant/defuse on release
       if (e.key.toLowerCase() === "f") {
         isPlantingRef.current = false;
         isDefusingRef.current = false;
@@ -694,7 +366,9 @@ export default function Game3D({ agentId, onBack, onOpenShop }: Game3DProps) {
 
     // ── POINTER LOCK ──
     const onPointerLockChange = () => {
-      mouseRef.current.locked = document.pointerLockElement === renderer.domElement;
+      const locked = document.pointerLockElement === renderer.domElement;
+      mouseRef.current.locked = locked;
+      setMountLocked(locked);
     };
     document.addEventListener("pointerlockchange", onPointerLockChange);
 
@@ -734,7 +408,6 @@ export default function Game3D({ agentId, onBack, onOpenShop }: Game3DProps) {
     if (!site) return;
 
     if (phaseRef.current === "playing") {
-      // Plant
       isPlantingRef.current = true;
       phaseRef.current = "planting";
       setPhase("planting");
@@ -758,7 +431,6 @@ export default function Game3D({ agentId, onBack, onOpenShop }: Game3DProps) {
         }
       }, 80);
     } else if (phaseRef.current === "planted" && bombSiteRef.current === site) {
-      // Defuse
       isDefusingRef.current = true;
       phaseRef.current = "defusing";
       setPhase("defusing");
@@ -791,7 +463,6 @@ export default function Game3D({ agentId, onBack, onOpenShop }: Game3DProps) {
     setAmmo(ammoRef.current);
     flashTimerRef.current = 0.08;
 
-    // Crosshair flash
     setCrosshairHit(true);
     setTimeout(() => setCrosshairHit(false), 100);
 
@@ -800,7 +471,6 @@ export default function Game3D({ agentId, onBack, onOpenShop }: Game3DProps) {
     const raycaster = new THREE.Raycaster();
     raycaster.setFromCamera(new THREE.Vector2(0, 0), cam);
 
-    // Check enemy hit
     for (const enemy of enemiesRef.current) {
       if (!enemy.alive) continue;
       const hitMeshes = enemy.mesh.children.filter(c => c instanceof THREE.Mesh);
@@ -819,8 +489,6 @@ export default function Game3D({ agentId, onBack, onOpenShop }: Game3DProps) {
           moneyRef.current += reward;
           setMoney(moneyRef.current);
           addKillfeed(`${isHeadshot ? "🎯 ХЕДШОТ!" : "✓"} ${enemy.name} уничтожен (+$${reward})`, isHeadshot ? "#f5a623" : "#ffffff");
-
-          // Win check
           const allDead = enemiesRef.current.every(e => !e.alive);
           if (allDead) {
             phaseRef.current = "round_won";
@@ -870,17 +538,13 @@ export default function Game3D({ agentId, onBack, onOpenShop }: Game3DProps) {
     return () => window.removeEventListener("mousedown", onMouseDown);
   }, [handleShoot]);
 
-  const fmt = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, "0")}`;
-
   const resetRound = () => {
-    // Reset enemies
     for (const e of enemiesRef.current) {
       e.alive = true;
       e.hp = e.maxHp;
       e.mesh.visible = true;
       e.mesh.position.copy(e.patrolPath[0]);
     }
-    // Reset state
     hpRef.current = agent.hp;
     ammoRef.current = 30;
     killsRef.current = 0;
@@ -909,217 +573,37 @@ export default function Game3D({ agentId, onBack, onOpenShop }: Game3DProps) {
       {/* THREE.JS CANVAS */}
       <div ref={mountRef} className="absolute inset-0" />
 
-      {/* POINTER LOCK OVERLAY */}
-      {!mouseRef.current.locked && phase !== "round_won" && phase !== "round_lost" && (
-        <div className="absolute inset-0 flex items-center justify-center z-40 bg-black/50" onClick={() => rendererRef.current?.domElement.requestPointerLock()}>
-          <div className="game-panel p-10 flex flex-col items-center gap-4 animate-fade-in text-center">
-            <div className="w-14 h-14 border-2 border-yellow-500/50 flex items-center justify-center">
-              <Icon name="MousePointer" size={24} className="text-yellow-400" />
-            </div>
-            <div className="orbitron text-white font-bold text-xl">НАЖМИ ДЛЯ ИГРЫ</div>
-            <div className="rajdhani text-white/50 text-base">Кликни чтобы захватить мышь и начать</div>
-            <div className="mono text-white/30 text-xs mt-2">ESC — выйти из режима  |  WASD — движение  |  ЛКМ — выстрел</div>
-            <div className="mono text-yellow-400/60 text-xs">F — закладка/дефуз бомбы  |  B — магазин</div>
-          </div>
-        </div>
-      )}
-
-      {/* CROSSHAIR */}
-      <div className="absolute inset-0 pointer-events-none z-20 flex items-center justify-center">
-        <div className={`relative transition-all duration-75 ${crosshairHit ? "scale-150" : "scale-100"}`}>
-          <div className={`absolute w-px h-3 ${crosshairHit ? "bg-red-400" : "bg-white"} opacity-90`} style={{ top: -14, left: 0 }} />
-          <div className={`absolute w-px h-3 ${crosshairHit ? "bg-red-400" : "bg-white"} opacity-90`} style={{ bottom: -14, left: 0 }} />
-          <div className={`absolute h-px w-3 ${crosshairHit ? "bg-red-400" : "bg-white"} opacity-90`} style={{ left: -14, top: 0 }} />
-          <div className={`absolute h-px w-3 ${crosshairHit ? "bg-red-400" : "bg-white"} opacity-90`} style={{ right: -14, top: 0 }} />
-          <div className={`w-1 h-1 rounded-full ${crosshairHit ? "bg-red-400" : "bg-white/60"}`} />
-        </div>
-      </div>
-
-      {/* ── HUD TOP ── */}
-      <div className="absolute top-0 left-0 right-0 z-30 flex items-start justify-between px-4 pt-3 pointer-events-none">
-        {/* Score */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <div className="flex gap-0.5">
-              {[0,1,2,3,4].map(i => <div key={i} className="w-2 h-3.5 bg-blue-400" />)}
-            </div>
-            <span className="orbitron font-bold text-white text-2xl">{score.ct}</span>
-          </div>
-          <div className="game-panel px-4 py-1.5 flex flex-col items-center min-w-16">
-            {phase === "planted" ? (
-              <><span className={`orbitron font-black text-2xl ${bombTimer <= 10 ? "text-red-400 animate-pulse-gold" : "text-red-300"}`}>{bombTimer}</span><span className="mono text-red-400/50 text-xs">💣</span></>
-            ) : (
-              <><span className={`orbitron font-bold text-xl ${roundTime <= 30 ? "text-red-400" : "text-white"}`}>{fmt(roundTime)}</span><span className="mono text-white/25 text-xs">РНД 10</span></>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="orbitron font-bold text-white text-2xl">{score.t}</span>
-            <div className="flex gap-0.5">
-              {enemiesRef.current.map((e, i) => <div key={i} className={`w-2 h-3.5 ${e.alive ? "bg-red-400" : "bg-red-400/20"}`} />)}
-            </div>
-          </div>
-        </div>
-
-        {/* Bomb planted indicator */}
-        {phase === "planted" && (
-          <div className="absolute top-3 left-1/2 -translate-x-1/2 game-panel px-4 py-1.5 border-red-500/40 flex items-center gap-2">
-            <span className="text-base animate-pulse-gold">💣</span>
-            <span className="orbitron text-red-400 text-xs font-bold tracking-widest">БОМБА НА ТОЧКЕ {bombSite}</span>
-          </div>
-        )}
-
-        {/* Kill feed */}
-        <div className="flex flex-col gap-1">
-          {killfeed.map((k, i) => (
-            <div key={i} className="game-panel flex items-center gap-2 px-2.5 py-1 max-w-xs">
-              <span className="rajdhani text-xs truncate" style={{ color: k.color }}>{k.text}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* ── HUD BOTTOM ── */}
-      <div className="absolute bottom-0 left-0 right-0 z-30 pointer-events-none">
-        {/* Plant/Defuse progress */}
-        {(phase === "planting" || phase === "defusing") && (
-          <div className="flex justify-center mb-4">
-            <div className="game-panel px-8 py-3 flex flex-col items-center gap-2">
-              <div className={`orbitron text-sm font-bold ${phase === "planting" ? "text-yellow-400" : "text-green-400"}`}>
-                {phase === "planting" ? "ЗАКЛАДКА БОМБЫ" : "ДЕФУЗИРОВАНИЕ"}
-              </div>
-              <div className="w-56 h-2 bg-white/10 rounded overflow-hidden">
-                <div className={`h-full rounded transition-all ${phase === "planting" ? "bg-yellow-400" : "bg-green-400"}`}
-                  style={{ width: `${phase === "planting" ? plantProgress : defuseProgress}%` }} />
-              </div>
-              <div className="mono text-white/35 text-xs">{phase === "planting" ? "УДЕРЖИВАЙТЕ F..." : "НЕ ОТПУСКАЙТЕ F!"}</div>
-            </div>
-          </div>
-        )}
-
-        {/* Near site prompt */}
-        {nearSite && phase === "playing" && (
-          <div className="flex justify-center mb-4">
-            <div className="game-panel px-4 py-2 border-yellow-500/40 flex items-center gap-2 animate-fade-in-fast">
-              <span className="text-yellow-400">💣</span>
-              <span className="orbitron text-yellow-400 text-xs font-bold">ТОЧКА {nearSite} — [F] ЗАЛОЖИТЬ БОМБУ</span>
-            </div>
-          </div>
-        )}
-        {nearSite && phase === "planted" && bombSite === nearSite && (
-          <div className="flex justify-center mb-4">
-            <div className="game-panel px-4 py-2 border-green-500/40 flex items-center gap-2 animate-fade-in-fast">
-              <span className="text-green-400">🔧</span>
-              <span className="orbitron text-green-400 text-xs font-bold">ТОЧКА {nearSite} — [F] ДЕФУЗИРОВАТЬ БОМБУ</span>
-            </div>
-          </div>
-        )}
-
-        {/* Main HUD bar */}
-        <div className="flex items-end justify-between px-4 pb-4">
-          {/* Agent + Stats */}
-          <div className="flex items-end gap-4">
-            <div className="game-panel p-2 flex flex-col items-center gap-1" style={{ borderColor: agent.color + '60' }}>
-              <div className="w-10 h-10 rounded flex items-center justify-center text-xl font-bold" style={{ background: agent.color + '30', color: agent.color }}>
-                {agent.name[0]}
-              </div>
-              <div className="mono text-xs" style={{ color: agent.color }}>{agent.role}</div>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <div className="flex items-center gap-2">
-                <Icon name="Heart" size={12} className="text-red-400" />
-                <div className="w-28 progress-bar">
-                  <div className="progress-fill" style={{ width: `${hp}%`, background: hp > 50 ? "linear-gradient(90deg,#22c55e,#4ade80)" : hp > 25 ? "linear-gradient(90deg,#f59e0b,#fbbf24)" : "linear-gradient(90deg,#ef4444,#f87171)" }} />
-                </div>
-                <span className="orbitron font-bold text-white text-lg">{hp}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Icon name="Shield" size={12} className="text-blue-400" />
-                <div className="w-28 progress-bar">
-                  <div className="progress-fill" style={{ width: `${armor}%`, background: "linear-gradient(90deg,#3b82f6,#60a5fa)" }} />
-                </div>
-                <span className="orbitron font-bold text-blue-400 text-sm">{armor}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Icon name="DollarSign" size={11} className="text-yellow-400/60" />
-                <span className="orbitron text-yellow-400 text-sm">${money.toLocaleString()}</span>
-                <div className="w-px h-3 bg-white/15" />
-                <Icon name="Target" size={11} className="text-white/40" />
-                <span className="orbitron text-white/60 text-sm">{kills} убийств</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Abilities */}
-          <div className="flex flex-col items-center gap-1.5">
-            <div className="flex items-center gap-2">
-              <div className={`w-10 h-10 flex items-center justify-center border text-xs orbitron font-bold transition-all ${abilityReady ? "border-yellow-500/60 text-yellow-400 bg-yellow-500/10" : "border-white/15 text-white/25"}`}>
-                Q
-              </div>
-              <div className="mono text-white/30 text-xs max-w-20">{agent.ability}</div>
-            </div>
-            <div className={`flex items-center gap-2`}>
-              <div className={`w-10 h-10 flex items-center justify-center border text-xs orbitron font-bold transition-all ${ultReady ? "border-red-500/60 text-red-400 bg-red-500/10 animate-pulse-gold" : "border-white/10 text-white/20"}`}>
-                X
-              </div>
-              <div className="mono text-white/30 text-xs max-w-20">{agent.ult}</div>
-            </div>
-          </div>
-
-          {/* Ammo */}
-          <div className="flex flex-col items-end gap-1">
-            <div className="flex items-end gap-2">
-              <span className="orbitron font-black text-white text-4xl">{ammo}</span>
-              <span className="orbitron text-white/25 text-xl mb-1">/ 90</span>
-            </div>
-            <div className="flex gap-0.5 flex-wrap justify-end max-w-32">
-              {[...Array(30)].map((_, i) => (
-                <div key={i} className={`w-1 h-3.5 ${i < ammo ? "bg-yellow-400" : "bg-white/8"}`} />
-              ))}
-            </div>
-            <div className="rajdhani text-white/45 text-sm tracking-wider">{agentId === "ghost" ? "M4A4" : agentId === "ironwall" ? "AUG" : "AK-47"}</div>
-          </div>
-        </div>
-      </div>
-
-      {/* FPS counter */}
-      <div className="absolute top-3 right-4 z-30 mono text-white/25 text-xs pointer-events-none">
-        {fps} FPS
-      </div>
-
-      {/* Back button */}
-      <div className="absolute top-14 left-4 z-30 pointer-events-auto">
-        <button className="game-panel px-3 py-1.5 flex items-center gap-2 text-white/35 hover:text-white transition-colors" onClick={onBack}>
-          <Icon name="ChevronLeft" size={14} />
-          <span className="mono text-xs">МЕНЮ</span>
-        </button>
-      </div>
-
-      {/* Controls hint */}
-      <div className="absolute bottom-24 left-1/2 -translate-x-1/2 z-30 pointer-events-auto">
-        <div className="flex gap-2">
-          <button className="btn-secondary" style={{ clipPath: "none", padding: "5px 12px", fontSize: 10 }} onClick={() => { if (document.pointerLockElement) document.exitPointerLock(); onOpenShop(); }}>[B] МАГАЗИН</button>
-          <button className="btn-secondary" style={{ clipPath: "none", padding: "5px 12px", fontSize: 10 }} onClick={handleAction}>[F] ДЕЙСТВИЕ</button>
-        </div>
-      </div>
-
-      {/* ── ROUND END ── */}
-      {(phase === "round_won" || phase === "round_lost") && (
-        <div className="absolute inset-0 flex items-center justify-center z-50 bg-black/70">
-          <div className="game-panel p-10 flex flex-col items-center gap-5 animate-fade-in text-center max-w-md">
-            <div className={`orbitron font-black text-3xl ${phase === "round_won" ? "text-yellow-400" : "text-red-400"}`}>
-              {phase === "round_won" ? "КТ ПОБЕДИЛИ!" : "ТЕРРОРИСТЫ ПОБЕДИЛИ!"}
-            </div>
-            <div className="flex gap-8">
-              <div><div className="orbitron text-white text-2xl">{kills}</div><div className="mono text-white/35 text-xs">УБИЙСТВ</div></div>
-              <div><div className="orbitron text-yellow-400 text-2xl">${money.toLocaleString()}</div><div className="mono text-white/35 text-xs">ДЕНЬГИ</div></div>
-            </div>
-            <div className="flex gap-3">
-              <button className="btn-primary" onClick={() => { resetRound(); onOpenShop(); }}>СЛЕД. РАУНД →</button>
-              <button className="btn-secondary" onClick={() => { resetRound(); onBack(); }}>МЕНЮ</button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* HUD */}
+      <GameHUD
+        mountLocked={mountLocked}
+        onRequestPointerLock={() => rendererRef.current?.domElement.requestPointerLock()}
+        phase={phase}
+        hp={hp}
+        armor={armor}
+        ammo={ammo}
+        money={money}
+        kills={kills}
+        roundTime={roundTime}
+        bombTimer={bombTimer}
+        plantProgress={plantProgress}
+        defuseProgress={defuseProgress}
+        nearSite={nearSite}
+        bombSite={bombSite}
+        score={score}
+        killfeed={killfeed}
+        crosshairHit={crosshairHit}
+        abilityReady={abilityReady}
+        ultReady={ultReady}
+        fps={fps}
+        agent={agent}
+        agentId={agentId}
+        enemies={enemiesRef.current}
+        onBack={onBack}
+        onOpenShop={() => { if (document.pointerLockElement) document.exitPointerLock(); onOpenShop(); }}
+        onAction={handleAction}
+        onResetAndShop={() => { resetRound(); onOpenShop(); }}
+        onResetAndBack={() => { resetRound(); onBack(); }}
+      />
     </div>
   );
 }
