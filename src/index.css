@@ -4,89 +4,34 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
-
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-
+    --background: 0 0% 5%;
+    --foreground: 0 0% 95%;
+    --card: 0 0% 8%;
+    --card-foreground: 0 0% 95%;
+    --popover: 0 0% 8%;
+    --popover-foreground: 0 0% 95%;
+    --primary: 45 100% 51%;
+    --primary-foreground: 0 0% 5%;
+    --secondary: 0 0% 12%;
+    --secondary-foreground: 0 0% 95%;
+    --muted: 0 0% 12%;
+    --muted-foreground: 0 0% 55%;
+    --accent: 0 85% 50%;
+    --accent-foreground: 0 0% 98%;
     --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 18%;
+    --input: 0 0% 18%;
+    --ring: 45 100% 51%;
+    --radius: 0.25rem;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
-
-    --radius: 0.5rem;
-
-    --sidebar-background: 0 0% 98%;
-
-    --sidebar-foreground: 240 5.3% 26.1%;
-
-    --sidebar-primary: 240 5.9% 10%;
-
-    --sidebar-primary-foreground: 0 0% 98%;
-
-    --sidebar-accent: 240 4.8% 95.9%;
-
-    --sidebar-accent-foreground: 240 5.9% 10%;
-
-    --sidebar-border: 220 13% 91%;
-
-    --sidebar-ring: 217.2 91.2% 59.8%;
-  }
-
-  .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --game-gold: #f5a623;
+    --game-red: #e02020;
+    --game-green: #00d4aa;
+    --game-blue: #4a9eff;
+    --game-dark: #0a0a0a;
+    --game-panel: rgba(10, 10, 10, 0.92);
+    --game-border: rgba(245, 166, 35, 0.3);
   }
 }
 
@@ -94,8 +39,483 @@
   * {
     @apply border-border;
   }
-
   body {
     @apply bg-background text-foreground;
+    font-family: "Rajdhani", sans-serif;
+    overflow: hidden;
   }
+}
+
+/* === SCANLINES EFFECT === */
+.scanlines::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.03) 2px,
+    rgba(0, 0, 0, 0.03) 4px
+  );
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* === NOISE TEXTURE === */
+.noise::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 9998;
+}
+
+/* === MENU BG === */
+.menu-bg {
+  background:
+    radial-gradient(
+      ellipse 80% 60% at 50% 100%,
+      rgba(224, 32, 32, 0.08) 0%,
+      transparent 70%
+    ),
+    radial-gradient(
+      ellipse 60% 40% at 80% 20%,
+      rgba(245, 166, 35, 0.05) 0%,
+      transparent 60%
+    ),
+    linear-gradient(160deg, #050505 0%, #0d0d0d 40%, #080808 100%);
+}
+
+/* === ANIMATED GRID === */
+.grid-bg {
+  background-image:
+    linear-gradient(rgba(245, 166, 35, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(245, 166, 35, 0.04) 1px, transparent 1px);
+  background-size: 60px 60px;
+  animation: grid-shift 20s linear infinite;
+}
+@keyframes grid-shift {
+  0% {
+    background-position: 0 0;
+  }
+  100% {
+    background-position: 60px 60px;
+  }
+}
+
+/* === CORNER DECORATIONS === */
+.corner-tl::before,
+.corner-br::after {
+  content: "";
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  border-color: var(--game-gold);
+  border-style: solid;
+}
+.corner-tl::before {
+  top: 0;
+  left: 0;
+  border-width: 2px 0 0 2px;
+}
+.corner-br::after {
+  bottom: 0;
+  right: 0;
+  border-width: 0 2px 2px 0;
+}
+
+/* === BUTTON STYLES === */
+.btn-primary {
+  position: relative;
+  background: linear-gradient(135deg, #f5a623 0%, #e8930d 100%);
+  color: #050505;
+  font-family: "Orbitron", sans-serif;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  border: none;
+  padding: 14px 40px;
+  clip-path: polygon(12px 0%, 100% 0%, calc(100% - 12px) 100%, 0% 100%);
+  cursor: pointer;
+  transition: all 0.2s;
+  overflow: hidden;
+}
+.btn-primary::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.2) 0%,
+    transparent 50%
+  );
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.btn-primary:hover::before {
+  opacity: 1;
+}
+.btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 30px rgba(245, 166, 35, 0.4);
+}
+.btn-primary:active {
+  transform: translateY(0);
+}
+
+.btn-secondary {
+  position: relative;
+  background: transparent;
+  color: #c8c8c8;
+  font-family: "Orbitron", sans-serif;
+  font-weight: 500;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  padding: 12px 36px;
+  clip-path: polygon(10px 0%, 100% 0%, calc(100% - 10px) 100%, 0% 100%);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-secondary:hover {
+  border-color: rgba(245, 166, 35, 0.5);
+  color: #f5a623;
+  background: rgba(245, 166, 35, 0.05);
+}
+
+.btn-danger {
+  background: linear-gradient(135deg, #e02020 0%, #b01010 100%);
+  color: white;
+  font-family: "Orbitron", sans-serif;
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  border: none;
+  padding: 12px 32px;
+  clip-path: polygon(10px 0%, 100% 0%, calc(100% - 10px) 100%, 0% 100%);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-danger:hover {
+  filter: brightness(1.2);
+  box-shadow: 0 6px 20px rgba(224, 32, 32, 0.4);
+}
+
+/* === PANEL === */
+.game-panel {
+  background: var(--game-panel);
+  border: 1px solid var(--game-border);
+  backdrop-filter: blur(12px);
+}
+
+/* === HUD ELEMENTS === */
+.hud-text {
+  font-family: "Share Tech Mono", monospace;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+.orbitron {
+  font-family: "Orbitron", sans-serif;
+}
+.rajdhani {
+  font-family: "Rajdhani", sans-serif;
+}
+.mono {
+  font-family: "Share Tech Mono", monospace;
+}
+
+/* === ANIMATIONS === */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes fade-in-fast {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes slide-right {
+  from {
+    opacity: 0;
+    transform: translateX(-30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+@keyframes pulse-gold {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+@keyframes bomb-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(224, 32, 32, 0.6);
+  }
+  50% {
+    box-shadow: 0 0 0 12px rgba(224, 32, 32, 0);
+  }
+}
+@keyframes countdown {
+  from {
+    stroke-dashoffset: 0;
+  }
+  to {
+    stroke-dashoffset: 283;
+  }
+}
+@keyframes glitch {
+  0%,
+  100% {
+    clip-path: none;
+    transform: none;
+  }
+  20% {
+    clip-path: polygon(0 20%, 100% 20%, 100% 40%, 0 40%);
+    transform: translateX(-3px);
+  }
+  40% {
+    clip-path: polygon(0 60%, 100% 60%, 100% 80%, 0 80%);
+    transform: translateX(3px);
+  }
+  60% {
+    clip-path: none;
+    transform: none;
+  }
+}
+@keyframes scan-line {
+  0% {
+    top: -2px;
+  }
+  100% {
+    top: 100%;
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.5s ease forwards;
+}
+.animate-fade-in-fast {
+  animation: fade-in-fast 0.3s ease forwards;
+}
+.animate-slide-right {
+  animation: slide-right 0.4s ease forwards;
+}
+.animate-pulse-gold {
+  animation: pulse-gold 1.5s ease-in-out infinite;
+}
+.animate-bomb-pulse {
+  animation: bomb-pulse 1s ease-in-out infinite;
+}
+
+.delay-100 {
+  animation-delay: 0.1s;
+}
+.delay-200 {
+  animation-delay: 0.2s;
+}
+.delay-300 {
+  animation-delay: 0.3s;
+}
+.delay-400 {
+  animation-delay: 0.4s;
+}
+.delay-500 {
+  animation-delay: 0.5s;
+}
+.delay-600 {
+  animation-delay: 0.6s;
+}
+.delay-700 {
+  animation-delay: 0.7s;
+}
+
+/* === CROSSHAIR === */
+.crosshair {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+.crosshair::before,
+.crosshair::after,
+.crosshair span::before,
+.crosshair span::after {
+  content: "";
+  position: absolute;
+  background: rgba(255, 255, 255, 0.9);
+}
+.crosshair::before {
+  width: 2px;
+  height: 6px;
+  top: 0;
+  left: 9px;
+}
+.crosshair::after {
+  width: 2px;
+  height: 6px;
+  bottom: 0;
+  left: 9px;
+}
+.crosshair span::before {
+  height: 2px;
+  width: 6px;
+  left: 0;
+  top: 9px;
+}
+.crosshair span::after {
+  height: 2px;
+  width: 6px;
+  right: 0;
+  top: 9px;
+}
+
+/* === PROGRESS BAR === */
+.progress-bar {
+  height: 3px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #f5a623, #ffd166);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+/* === WEAPON CARD === */
+.weapon-card {
+  position: relative;
+  background: rgba(15, 15, 15, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+  transition: all 0.2s;
+  overflow: hidden;
+}
+.weapon-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    135deg,
+    rgba(245, 166, 35, 0.05) 0%,
+    transparent 60%
+  );
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.weapon-card:hover {
+  border-color: rgba(245, 166, 35, 0.4);
+  transform: translateY(-2px);
+}
+.weapon-card:hover::before {
+  opacity: 1;
+}
+.weapon-card.selected {
+  border-color: #f5a623;
+  background: rgba(245, 166, 35, 0.08);
+}
+.weapon-card.selected::after {
+  content: "✓";
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  color: #f5a623;
+  font-size: 14px;
+  font-weight: bold;
+}
+
+/* === MINIMAP === */
+.minimap-dot {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+
+/* === HEALTH BAR === */
+.health-fill {
+  transition: width 0.5s ease;
+}
+
+/* === MODE CARD === */
+.mode-card {
+  position: relative;
+  cursor: pointer;
+  transition: all 0.25s;
+  overflow: hidden;
+}
+.mode-card::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #f5a623, transparent);
+  transform: scaleX(0);
+  transition: transform 0.3s;
+}
+.mode-card:hover::after,
+.mode-card.active::after {
+  transform: scaleX(1);
+}
+.mode-card:hover {
+  transform: translateY(-3px);
+}
+
+/* === BOMB TIMER SVG === */
+.bomb-timer-ring {
+  transform: rotate(-90deg);
+  transform-origin: center;
+}
+
+/* === NOTIFICATION === */
+.kill-feed-item {
+  animation:
+    fade-in 0.3s ease,
+    fade-out 0.3s ease 3s forwards;
+}
+@keyframes fade-out {
+  to {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+}
+
+/* === SCROLLBAR === */
+::-webkit-scrollbar {
+  width: 4px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.03);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(245, 166, 35, 0.3);
+  border-radius: 2px;
 }
