@@ -1,8 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useRef } from "react";
 import Icon from "@/components/ui/icon";
+import Game3D, { AGENTS } from "@/components/Game3D";
 
-type Screen = "menu" | "mode-select" | "shop" | "game" | "settings" | "scoreboard";
+type Screen = "menu" | "mode-select" | "agent-select" | "shop" | "game" | "game3d" | "settings" | "scoreboard";
 type GamePhase = "playing" | "planting" | "planted" | "defusing" | "round-end";
 
 const WEAPONS = {
@@ -1000,15 +1001,217 @@ function ScoreboardScreen({ onNavigate }: { onNavigate: (s: Screen) => void }) {
   );
 }
 
+// ===================== AGENT SELECT =====================
+function AgentSelectScreen({ onNavigate }: { onNavigate: (s: Screen) => void }) {
+  const [selected, setSelected] = useState<string | null>(null);
+  const [hovered, setHovered] = useState<string | null>(null);
+
+  const display = hovered || selected || AGENTS[0].id;
+  const agent = AGENTS.find(a => a.id === display) || AGENTS[0];
+
+  return (
+    <div className="menu-bg scanlines noise w-full h-screen flex flex-col relative overflow-hidden">
+      <div className="grid-bg absolute inset-0 opacity-25" />
+      <div className="relative z-10 flex items-center justify-between px-8 py-5 border-b border-white/5">
+        <button onClick={() => onNavigate("mode-select")} className="flex items-center gap-2 text-white/35 hover:text-white transition-colors">
+          <Icon name="ChevronLeft" size={16} />
+          <span className="rajdhani text-sm tracking-wider">НАЗАД</span>
+        </button>
+        <span className="orbitron text-white/70 text-sm tracking-widest">ВЫБОР АГЕНТА</span>
+        <div className="w-20" />
+      </div>
+
+      <div className="relative z-10 flex flex-1 overflow-hidden">
+        {/* Agent list */}
+        <div className="w-72 border-r border-white/5 flex flex-col py-4 gap-2 px-4 overflow-y-auto">
+          <div className="mono text-white/25 text-xs tracking-widest mb-2">АГЕНТЫ</div>
+          {AGENTS.map((a) => (
+            <div
+              key={a.id}
+              className={`flex items-center gap-3 p-3 cursor-pointer border transition-all duration-200 ${selected === a.id ? 'border-yellow-500/60 bg-yellow-500/8' : 'border-white/5 hover:border-white/15'}`}
+              onMouseEnter={() => setHovered(a.id)}
+              onMouseLeave={() => setHovered(null)}
+              onClick={() => setSelected(a.id)}
+            >
+              <div className="w-10 h-10 flex items-center justify-center text-lg font-black border" style={{ background: a.color + '20', borderColor: a.color + '50', color: a.color }}>
+                {a.name[0]}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className={`rajdhani font-bold text-sm ${selected === a.id ? 'text-yellow-400' : 'text-white/80'}`}>{a.name}</div>
+                <div className="mono text-xs" style={{ color: a.color }}>{a.role}</div>
+              </div>
+              {selected === a.id && <Icon name="Check" size={14} className="text-yellow-400" />}
+            </div>
+          ))}
+        </div>
+
+        {/* Agent preview */}
+        <div className="flex-1 flex flex-col items-center justify-center p-10 gap-6">
+          {/* Big avatar */}
+          <div className="relative w-40 h-40 flex items-center justify-center animate-fade-in" key={agent.id}>
+            {/* Rings */}
+            <div className="absolute inset-0 rounded-full border opacity-20" style={{ borderColor: agent.color }} />
+            <div className="absolute inset-4 rounded-full border opacity-30" style={{ borderColor: agent.color }} />
+            <div className="absolute inset-8 rounded-full border opacity-50" style={{ borderColor: agent.color }} />
+            {/* Avatar */}
+            <div className="w-24 h-24 flex items-center justify-center text-5xl font-black border-2 rounded-sm" style={{ background: agent.color + '15', borderColor: agent.color + '60', color: agent.color }}>
+              {agent.name[0]}
+            </div>
+          </div>
+
+          <div className="text-center">
+            <div className="orbitron font-black text-white text-3xl mb-1">{agent.name}</div>
+            <div className="mono text-sm mb-3" style={{ color: agent.color }}>{agent.role.toUpperCase()}</div>
+            <p className="rajdhani text-white/50 text-base max-w-sm leading-relaxed">{agent.desc}</p>
+          </div>
+
+          {/* Stats */}
+          <div className="flex gap-6">
+            <div className="text-center">
+              <div className="orbitron font-bold text-white">{agent.hp}</div>
+              <div className="mono text-white/30 text-xs">ЗДОРОВЬЕ</div>
+            </div>
+            <div className="w-px h-8 bg-white/10" />
+            <div className="text-center">
+              <div className="orbitron font-bold text-white">{Math.round(agent.speed * 100)}%</div>
+              <div className="mono text-white/30 text-xs">СКОРОСТЬ</div>
+            </div>
+          </div>
+
+          {/* Abilities */}
+          <div className="flex gap-4">
+            <div className="game-panel p-4 flex flex-col items-center gap-2 w-40">
+              <div className="orbitron text-xs border border-yellow-500/40 px-2 py-0.5 text-yellow-400">Q</div>
+              <div className="rajdhani text-white/70 text-sm text-center">{agent.ability}</div>
+              <div className="mono text-white/25 text-xs">СПОСОБНОСТЬ</div>
+            </div>
+            <div className="game-panel p-4 flex flex-col items-center gap-2 w-40">
+              <div className="orbitron text-xs border border-red-500/40 px-2 py-0.5 text-red-400">X</div>
+              <div className="rajdhani text-white/70 text-sm text-center">{agent.ult}</div>
+              <div className="mono text-white/25 text-xs">УЛЬТИМЕЙТ</div>
+            </div>
+          </div>
+
+          <button
+            className={`btn-primary ${!selected ? 'opacity-40 cursor-not-allowed' : ''}`}
+            disabled={!selected}
+            onClick={() => selected && onNavigate("game3d")}
+          >
+            {selected ? `ИГРАТЬ ЗА ${agent.name.toUpperCase()} →` : 'ВЫБЕРИТЕ АГЕНТА'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ===================== ROOT =====================
 export default function Index() {
   const [screen, setScreen] = useState<Screen>("menu");
+  const [selectedAgent, setSelectedAgent] = useState("ghost");
+
+  // Wrapper for agent select that stores choice
+  const AgentSelectWithStore = ({ onNavigate }: { onNavigate: (s: Screen) => void }) => {
+    const [sel, setSel] = useState<string | null>(null);
+    const [hovered, setHovered] = useState<string | null>(null);
+    const display = hovered || sel || AGENTS[0].id;
+    const agent = AGENTS.find(a => a.id === display) || AGENTS[0];
+
+    return (
+      <div className="menu-bg scanlines noise w-full h-screen flex flex-col relative overflow-hidden">
+        <div className="grid-bg absolute inset-0 opacity-25" />
+        <div className="relative z-10 flex items-center justify-between px-8 py-5 border-b border-white/5">
+          <button onClick={() => onNavigate("mode-select")} className="flex items-center gap-2 text-white/35 hover:text-white transition-colors">
+            <Icon name="ChevronLeft" size={16} />
+            <span className="rajdhani text-sm tracking-wider">НАЗАД</span>
+          </button>
+          <span className="orbitron text-white/70 text-sm tracking-widest">ВЫБОР АГЕНТА</span>
+          <div className="w-20" />
+        </div>
+        <div className="relative z-10 flex flex-1 overflow-hidden">
+          {/* Agent list */}
+          <div className="w-72 border-r border-white/5 flex flex-col py-4 gap-2 px-4 overflow-y-auto">
+            <div className="mono text-white/25 text-xs tracking-widest mb-2">АГЕНТЫ</div>
+            {AGENTS.map((a) => (
+              <div key={a.id}
+                className={`flex items-center gap-3 p-3 cursor-pointer border transition-all duration-200 ${sel === a.id ? 'border-yellow-500/60 bg-yellow-500/8' : 'border-white/5 hover:border-white/15'}`}
+                onMouseEnter={() => setHovered(a.id)}
+                onMouseLeave={() => setHovered(null)}
+                onClick={() => setSel(a.id)}
+              >
+                <div className="w-10 h-10 flex items-center justify-center text-lg font-black border" style={{ background: a.color + '20', borderColor: a.color + '50', color: a.color }}>{a.name[0]}</div>
+                <div className="flex-1 min-w-0">
+                  <div className={`rajdhani font-bold text-sm ${sel === a.id ? 'text-yellow-400' : 'text-white/80'}`}>{a.name}</div>
+                  <div className="mono text-xs" style={{ color: a.color }}>{a.role}</div>
+                </div>
+                {sel === a.id && <Icon name="Check" size={14} className="text-yellow-400" />}
+              </div>
+            ))}
+          </div>
+          {/* Preview */}
+          <div className="flex-1 flex flex-col items-center justify-center p-10 gap-5">
+            <div className="relative w-36 h-36 flex items-center justify-center animate-fade-in" key={agent.id}>
+              <div className="absolute inset-0 rounded-full border opacity-15" style={{ borderColor: agent.color }} />
+              <div className="absolute inset-4 rounded-full border opacity-25" style={{ borderColor: agent.color }} />
+              <div className="w-20 h-20 flex items-center justify-center text-4xl font-black border-2" style={{ background: agent.color + '15', borderColor: agent.color + '60', color: agent.color }}>{agent.name[0]}</div>
+            </div>
+            <div className="text-center">
+              <div className="orbitron font-black text-white text-3xl mb-0.5">{agent.name}</div>
+              <div className="mono text-sm mb-3" style={{ color: agent.color }}>{agent.role.toUpperCase()}</div>
+              <p className="rajdhani text-white/45 text-base max-w-sm leading-relaxed">{agent.desc}</p>
+            </div>
+            <div className="flex gap-5">
+              <div className="text-center"><div className="orbitron font-bold text-white">{agent.hp}</div><div className="mono text-white/25 text-xs">ЗДОРОВЬЕ</div></div>
+              <div className="w-px h-8 bg-white/10" />
+              <div className="text-center"><div className="orbitron font-bold text-white">{Math.round(agent.speed * 100)}%</div><div className="mono text-white/25 text-xs">СКОРОСТЬ</div></div>
+            </div>
+            <div className="flex gap-3">
+              <div className="game-panel p-3 flex flex-col items-center gap-1.5 w-36">
+                <div className="orbitron text-xs border border-yellow-500/40 px-2 py-0.5 text-yellow-400">Q</div>
+                <div className="rajdhani text-white/65 text-sm text-center">{agent.ability}</div>
+                <div className="mono text-white/20 text-xs">СПОСОБНОСТЬ</div>
+              </div>
+              <div className="game-panel p-3 flex flex-col items-center gap-1.5 w-36">
+                <div className="orbitron text-xs border border-red-500/40 px-2 py-0.5 text-red-400">X</div>
+                <div className="rajdhani text-white/65 text-sm text-center">{agent.ult}</div>
+                <div className="mono text-white/20 text-xs">УЛЬТИМЕЙТ</div>
+              </div>
+            </div>
+            <button
+              className={`btn-primary ${!sel ? 'opacity-40 cursor-not-allowed' : ''}`}
+              disabled={!sel}
+              onClick={() => {
+                if (sel) {
+                  setSelectedAgent(sel);
+                  onNavigate("game3d");
+                }
+              }}
+            >
+              {sel ? `ИГРАТЬ ЗА ${agent.name.toUpperCase()} →` : 'ВЫБЕРИТЕ АГЕНТА'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="w-screen h-screen overflow-hidden">
       {screen === "menu" && <MenuScreen onNavigate={setScreen} />}
-      {screen === "mode-select" && <ModeSelectScreen onNavigate={setScreen} />}
+      {screen === "mode-select" && <ModeSelectScreen onNavigate={(s) => {
+        if (s === "shop") setScreen("agent-select");
+        else setScreen(s);
+      }} />}
+      {screen === "agent-select" && <AgentSelectWithStore onNavigate={setScreen} />}
       {screen === "shop" && <ShopScreen onNavigate={setScreen} />}
       {screen === "game" && <GameScreen onNavigate={setScreen} />}
+      {screen === "game3d" && (
+        <Game3D
+          agentId={selectedAgent}
+          onBack={() => setScreen("menu")}
+          onOpenShop={() => setScreen("shop")}
+        />
+      )}
       {screen === "settings" && <SettingsScreen onNavigate={setScreen} />}
       {screen === "scoreboard" && <ScoreboardScreen onNavigate={setScreen} />}
     </div>
